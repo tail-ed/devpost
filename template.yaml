@@ -1,0 +1,111 @@
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  devpost
+
+  SAM Template for the serverless Devpost scraping API
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+  Api:
+    TracingEnabled: true
+
+Resources:
+  ApiGateway:
+      Type: AWS::Serverless::Api
+      Properties:
+        StageName: Prod
+        Auth:
+          ApiKeyRequired: true
+
+  DevpostApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub devpost-api-key-${AWS::StackName}
+      Description: Devpost API Key
+      Enabled: true
+
+  DevpostUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - ApiGatewayProdStage
+    Properties:
+      ApiStages:
+        - ApiId: !Ref ApiGateway
+          Stage: !Ref ApiGatewayProdStage
+      Description: Devpost Usage Plan
+
+  DevpostUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: DevpostUsagePlan
+    Properties:
+      KeyId: !Ref DevpostApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref DevpostUsagePlan
+
+  GetUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: user/
+      Handler: user_app.lambda_handler
+      Runtime: python3.12
+      Architectures:
+      - x86_64
+      Events:
+        GetUserApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /user/{anyuser+}
+            Method: get
+
+  GetProjectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: project/
+      Handler: project_app.lambda_handler
+      Runtime: python3.12
+      Architectures:
+      - x86_64
+      Events:
+        GetProjectApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /project/{anyproject+}
+            Method: get
+
+  GetHackathonFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hackathon/
+      Handler: hackathon_app.lambda_handler
+      Runtime: python3.12
+      Architectures:
+      - x86_64
+      Events:
+        GetHackathonApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /hackathon/{anyhackathon+}
+            Method: get
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
